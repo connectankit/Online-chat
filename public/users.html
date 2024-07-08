@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Socket.IO chat</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: sans-serif;
+      }
+      ul {
+        list-style-type: none;
+        padding: 0;
+      }
+      li {
+        padding: 8px;
+        margin-bottom: 10px;
+        background: #f3f3f3;
+      }
+      input {
+        padding: 10px;
+        width: calc(100% - 22px);
+        border: 1px solid #ccc;
+      }
+      #users {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        padding: 5px;
+      }
+      .user_div {
+        background-color: gray;
+        padding: 10px;
+        display: inline-block;
+        width: 200px;
+        border: 2px solid transparent;
+        color: white;
+      }
+      .user_div:hover {
+        cursor: pointer;
+        border: 2px solid black;
+      }
+      .current_user_details {
+        border: 2px solid gray;
+        height: 100px;
+        display: flex;
+        gap: 10px;
+        justify-content: space-evenly;
+        align-items: center;
+      }
+      .usersContainer {
+        border: 1px solid green;
+        display: flex;
+        height: 70vh;
+      }
+      .messageBoxContainer {
+        border: 2px solid greenyellow;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .messagesContainer {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        max-height: 60vh;
+        overflow-y: scroll;
+      }
+      .messageBox {
+        padding: 10px;
+        border: 1px solid #ccc;
+        resize: none;
+        height: 150px;
+      }
+      .sendMessageBtn {
+        padding: 10px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+        width: 100px;
+      }
+      .sendMessageBtn:hover {
+        background-color: #0056b3;
+      }
+      .message {
+        background-color: #e0e0e0;
+        padding: 10px;
+        margin-bottom: 5px;
+        border-radius: 5px;
+        max-width: 80%;
+      }
+      .message.sent {
+        background-color: #d3e7ff;
+        align-self: flex-end;
+      }
+      .message.received {
+        background-color: #f0f0f0;
+        align-self: flex-start;
+      }
+      .active {
+        background-color: black !important;
+      }
+      .circle {
+        display: inline-block;
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+        background-color: green;
+      }
+      .user_online {
+        border-top: 5px solid green !important;
+      }
+      .btn {
+        color: #ffffff;
+        background-color: #2d63c8;
+        font-size: 19px;
+        border: 1px solid #2d63c8;
+        padding: 15px 50px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="current_user_details">
+      <h1 id="name">Name</h1>
+      <h1 id="email">Email</h1>
+      <p
+        style="
+          display: flex;
+          gap: 5px;
+          align-items: center;
+          justify-content: center;
+        "
+      >
+        <span class="circle"></span> Online
+      </p>
+      <button class="btn" id="btn">Logout</button>
+    </div>
+    <div class="usersContainer">
+      <div class="users" id="users"></div>
+      <div class="messageBoxContainer">
+        <div id="messagesContainer" class="messagesContainer"></div>
+        <div class="sending_box">
+          <div
+            id="messageBox"
+            class="messageBox"
+            contenteditable="true"
+            placeholder="Type your message here..."
+          ></div>
+          <button id="sendMessageBtn" class="sendMessageBtn">Send</button>
+        </div>
+      </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      let currentUser = null;
+      let oldRoomData = localStorage.getItem("roomData");
+      let messages = {};
+      if (oldRoomData) {
+        messages = JSON.parse(oldRoomData);
+      }
+      let currentUserRoom = null;
+
+      let user = localStorage.getItem("user");
+      if (!user) {
+        window.location.href = "/login";
+      }
+      user = JSON.parse(user);
+      document.getElementById("name").innerText = "Name = " + user.first_name;
+      document.getElementById("email").innerText = "Email = " + user.email;
+
+      let UsersDiv = document.getElementById("users");
+      let MessagesContainer = document.getElementById("messagesContainer");
+
+      fetch("/user/" + user.email)
+        .then((res) => res.json())
+        .then((newRes) => {
+          let response = newRes;
+          let str = response
+            .map(
+              (element) =>
+                `<span class="user-span user_div" data-user-id="${element.id.$oid}" id="${element.id.$oid}">${element.first_name}  ${element.email}</span>`
+            )
+            .join("");
+          UsersDiv.insertAdjacentHTML("beforeend", str);
+
+          UsersDiv.addEventListener("click", (event) => {
+            const targetSpan = event.target.closest(".user-span");
+            if (targetSpan) {
+              const userSpans = document.querySelectorAll(".user-span");
+              userSpans.forEach((span) => span.classList.remove("active"));
+              targetSpan.classList.add("active");
+              currentUser = targetSpan.getAttribute("data-user-id");
+              let currentRoom = generateRoomId(currentUser, user.id.$oid);
+              currentUserRoom = currentRoom;
+              loadMessages(currentRoom);
+            }
+          });
+          return newRes;
+        })
+        .then((res) => {
+          let rooms = res.map((ele) =>
+            generateRoomId(ele.id.$oid, user.id.$oid)
+          );
+          socket.emit("join_rooms", rooms);
+        })
+        .catch((error) => {
+          console.error("Error fetching users:", error);
+        });
+
+      const messageBox = document.getElementById("messageBox");
+      const sendMessageBtn = document.getElementById("sendMessageBtn");
+
+      sendMessageBtn.addEventListener("click", () => {
+        const message = messageBox.textContent.trim();
+        handleTypingStop()
+        // console.log(currentUser,message,"messages")
+        if (message && currentUser) {
+          sendMessage(currentUser, message);
+          messageBox.textContent = ""; // Clear message box after sending
+        } else {
+          alert("Please select a user ");
+        }
+      });
+
+      let btn = document.getElementById("btn");
+      btn.addEventListener("click", () => {
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+      });
+
+      //   console.log(currUser)
+
+      //   function loadMessages(userId) {
+      //     MessagesContainer.innerHTML = "";
+      //     const receivedMessage = `
+      //       <div class="message received">
+      //         <p>Sample received message</p>
+      //       </div>
+      //     `;
+      //     MessagesContainer.insertAdjacentHTML("beforeend", receivedMessage);
+      //   }
+
+      var socket = io({
+        query: {
+          id: user.id.$oid,
+        },
+      });
+
+      socket.on("chat message", function (msg) {
+        var item = document.createElement("li");
+        item.textContent = msg;
+        messages.appendChild(item);
+        handleScrolllMessages()
+      });
+
+      socket.on("offline", function (id) {
+        let userOnline = document.getElementById(id);
+        userOnline.classList.remove("user_online");
+      });
+
+      socket.on("onlineUsers", function (onlineUsers) {
+        onlineUsers.forEach((userId) => {
+          let userOnline = document.getElementById(userId);
+          if (userOnline) {
+            userOnline.classList.add("user_online");
+            console.log(userId);
+          }
+        });
+      });
+      function insertMessage(message, id,isTypingMessage=false) {
+        const sentMessage = `
+          <div class="message ${id === user.id.$oid ? "sent" : "received"} " id="${isTypingMessage ? "typingIndicator" : ""}" >
+            <p>${message}</p>
+          </div>
+        `;
+        MessagesContainer.insertAdjacentHTML("beforeend", sentMessage);
+        // window.scrollTo(0, document.body.scrollHeight);
+        handleScrolllMessages()
+      }
+
+      function sendMessage(userId, message) {
+        let room = generateRoomId(userId, user.id.$oid);
+        socket.emit("private_message", { room, message: message });
+        
+      }
+
+      let messageBoxCon = document.getElementById("messageBox");
+
+      let timeoutId;
+      let immediateCall = true;
+
+      function debounceWithImmediate(func, immediateFunc, delay) {
+          clearTimeout(timeoutId);
+          if (immediateCall) {
+            immediateFunc();
+            immediateCall = false;
+          }
+          timeoutId = setTimeout(function () {
+            immediateCall = true;
+            func();
+          }, delay);
+      }
+
+      messageBox.addEventListener("input", function () {
+        debounceWithImmediate(
+          () => handleTypingStop(),
+          () => handleTypingStart(),
+          1500
+        );
+      });
+      socket.on("start_typing", function ({ room, currentUser: user1 }) {
+        if (currentUserRoom == room) {
+            if(user1 !== user.id.$oid){
+
+                console.log(user1 !== currentUser,"cdscd",currentUser,user1)
+                insertMessage("Typing", user1,true);
+                
+
+            }
+         
+        }
+      });
+      socket.on("stop_typing", function ({ room, currentUser }) {
+
+        console.log("stop_typing")
+        const typingIndicator = document.getElementById('typingIndicator');
+        if (typingIndicator) {
+        typingIndicator.remove();
+        } else {
+        console.log('Element with id "typingIndicator" not found.');
+        }
+
+      });
+
+      function handleTypingStart() {
+        if (currentUserRoom) {
+          socket.emit("start_typing", {
+            room: currentUserRoom,
+            currentUser:user.id.$oid,
+          });
+        }
+      }
+
+      function handleTypingStop() {
+          if (currentUserRoom) {
+            socket.emit("stop_typing", {
+              room: currentUserRoom,
+              currentUser:user.id.$oid,
+            });
+          }
+      }
+
+      function generateRoomId(userId1, userId2) {
+        // Generate a unique room ID based on user IDs (can be any consistent method)
+        return userId1 < userId2
+          ? `${userId1}-${userId2}`
+          : `${userId2}-${userId1}`;
+      }
+
+      //   socket.emit('private message', { room, message: input.value });
+
+      socket.on("private_message", function ({ message, id, room }) {
+        if (currentUserRoom === room) {
+          insertMessage(message, id);
+        }
+        if (messages[room]) {
+          messages[room].push({ message, id, room });
+        } else {
+          messages[room] = [{ message, id, room }];
+        }
+
+        localStorage.setItem("roomData", JSON.stringify(messages));
+      });
+
+      function loadMessages(room) {
+        let roomData = messages[room];
+        if (!roomData) {
+          roomData = [];
+        }
+        MessagesContainer.innerHTML = "";
+
+        const receivedMessage = roomData
+          .map(
+            (element) =>
+              `
+            <div class="message ${
+              element.id === user.id.$oid ? "sent" : "received"
+            }">
+            <p>${element.message}</p>
+          </div>
+            `
+          )
+          .join("");
+        MessagesContainer.insertAdjacentHTML("beforeend", receivedMessage);
+        // window.scrollTo(0, document.body.scrollHeight);
+        handleScrolllMessages()
+
+      }
+
+   function   handleScrolllMessages(){
+        const scrollableElement = document.getElementById('messagesContainer');
+        if (scrollableElement) {
+        // Scroll to the bottom of the element
+        scrollableElement.scrollTo({
+            top: scrollableElement.scrollHeight,
+            behavior: 'smooth'  // Optional: smooth scrolling behavior
+        });
+}
+      }
+
+      // socket.emmit("join_rooms",)
+    </script>
+  </body>
+</html>

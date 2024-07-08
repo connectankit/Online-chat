@@ -1,0 +1,27 @@
+[{
+    "id": {
+      "$oid": "668bfd61fc13ae471a234936"
+    },
+    "first_name": "Ankit",
+    "last_name": "Kumar",
+    "email": "ankitkumarasus@gmail.com",
+    "password":"testing"
+  }, {
+    "id": {
+      "$oid": "668bfd61fc13ae471a234937"
+    },
+    "first_name": "harish",
+    "last_name": "arora",
+    "email": "harish@gmail.com",
+    "password":"testing"
+  }, {
+    "id": {
+      "$oid": "668bfd61fc13ae471a234938"
+    },
+    "first_name": "test",
+    "last_name": "test1",
+    "email": "testing@gmail.com",
+    "password":"testing"
+  }
+
+]

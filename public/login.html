@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Login</title>
+  <style>
+    body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f3f3f3; }
+    .login-container { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+    .login-container input { width: 100%; padding: 10px 0px; margin: 10px 0; }
+    .login-container button { padding: 10px; width: 100%; background-color: #007BFF; border: none; color: white; cursor: pointer; }
+    .login-container button:hover { background-color: #0056b3; }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <h2>Login</h2>
+    <form id="loginForm">
+      <input type="text" id="email" placeholder="Enter your Email address" required />
+      <input type="text" id="password" placeholder="Enter your Password" required />
+      <button type="submit">Login</button>
+    </form>
+  </div>
+
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      fetch("/auth-login",{
+        method:"POST",
+        headers: {
+    'Content-Type': 'application/json',
+  },
+
+        body:JSON.stringify({
+            email,
+        password
+        })
+       
+      }).then(response=>response.json()).then(res=>{
+        localStorage.setItem('user', JSON.stringify(res));
+        window.location.href = '/users';
+      }).catch(error=>{
+
+      })
+    });
+  </script>
+</body>
+</html>
